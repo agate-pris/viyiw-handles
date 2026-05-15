@@ -1,0 +1,18 @@
+{
+  "name": "dev.agate-pris.viyiw-handles",
+  "version": "0.1.0",
+  "displayName": "Viyiw Handles",
+  "license": "MIT",
+  "licensesUrl": "https://github.com/agate-pris/Viyiw.Handles/blob/main/LICENSE",
+  "dependencies": {
+  },
+  "author": {
+    "name": "Agate Pris",
+    "url": "https://www.agate-pris.dev"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agate-pris/Viyiw.Handles",
+    "revision": ""
+  }
+}
