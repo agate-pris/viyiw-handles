@@ -1,0 +1,9 @@
+*.asmdef        text eol=lf
+*.cs            text eol=lf
+*.gitattributes text eol=lf
+*.gitignore     text eol=lf
+*.gitmodules    text eol=lf
+*.json          text eol=lf
+*.md            text eol=lf
+*.meta          text eol=lf
+LICENSE         text eol=lf
