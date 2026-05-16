@@ -49,6 +49,37 @@ namespace Viyiw.Handles {
         }
     }
 
+    public readonly struct Handle : IEquatable<Handle> {
+        private readonly InstanceId _instanceId;
+        private readonly Generation _generation;
+        internal Handle(InstanceId instanceId, Generation generation) {
+            if (instanceId.IsValid() && generation.IsValid()) {
+                _instanceId = instanceId;
+                _generation = generation;
+                return;
+            }
+            throw new InvalidOperationException("ハンドルの作成に失敗しました。");
+        }
+        internal InstanceId GetInstanceId() => _instanceId;
+        internal Generation GetGeneration() => _generation;
+        public bool IsValid() => _instanceId.IsValid() && _generation.IsValid();
+        public bool Equals(Handle other) {
+            return _instanceId == other._instanceId && _generation == other._generation;
+        }
+        public override bool Equals(object obj) {
+            return obj is Handle other && Equals(other);
+        }
+        public override int GetHashCode() {
+            return HashCode.Combine(_instanceId.GetHashCode(), _generation.GetHashCode());
+        }
+        public static bool operator ==(Handle left, Handle right) {
+            return left._instanceId == right._instanceId && left._generation == right._generation;
+        }
+        public static bool operator !=(Handle left, Handle right) {
+            return left._instanceId != right._instanceId || left._generation != right._generation;
+        }
+    }
+
     internal interface IGenerationSource {
         internal bool IsValid();
         Generation GetGeneration();
@@ -71,8 +102,8 @@ namespace Viyiw.Handles {
         }
         public bool EqualsHandle(Handle handle) {
             var generation = _generationSource.GetGeneration();
-            var current = new Handle(_instanceId, generation);
-            return current.Equals(handle);
+            return _instanceId == handle.GetInstanceId() &&
+                generation == handle.GetGeneration();
         }
     }
 
@@ -139,37 +170,6 @@ namespace Viyiw.Handles {
             } else {
                 throw new InvalidOperationException("ハンドルの開放に失敗しました。不明なインスタンス ID です。");
             }
-        }
-    }
-
-    public readonly struct Handle : IEquatable<Handle> {
-        private readonly InstanceId _instanceId;
-        private readonly Generation _generation;
-        internal Handle(InstanceId instanceId, Generation generation) {
-            if (instanceId.IsValid() && generation.IsValid()) {
-                _instanceId = instanceId;
-                _generation = generation;
-                return;
-            }
-            throw new InvalidOperationException("ハンドルの作成に失敗しました。");
-        }
-        internal InstanceId GetInstanceId() => _instanceId;
-        internal Generation GetGeneration() => _generation;
-        public bool IsValid() => _instanceId.IsValid() && _generation.IsValid();
-        public bool Equals(Handle other) {
-            return _instanceId == other._instanceId && _generation == other._generation;
-        }
-        public override bool Equals(object obj) {
-            return obj is Handle other && Equals(other);
-        }
-        public override int GetHashCode() {
-            return HashCode.Combine(_instanceId.GetHashCode(), _generation.GetHashCode());
-        }
-        public static bool operator ==(Handle left, Handle right) {
-            return left._instanceId == right._instanceId && left._generation == right._generation;
-        }
-        public static bool operator !=(Handle left, Handle right) {
-            return left._instanceId != right._instanceId || left._generation != right._generation;
         }
     }
 
