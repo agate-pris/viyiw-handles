@@ -35,7 +35,7 @@ namespace Viyiw.Handles {
     }
 
     internal interface IGenerationSource {
-        internal Generation GetGeneration();
+        Generation GetGeneration();
     }
 
     public readonly struct HandleIdentity {
@@ -48,7 +48,10 @@ namespace Viyiw.Handles {
             _generationSource = generationSource;
         }
         public GenericHandle ToHandle() {
-            if (GenericHandle.TryNew(_instanceId, _generationSource.GetGeneration(), out var newHandle)) {
+
+            var generation = _generationSource.GetGeneration();
+
+            if (GenericHandle.TryNew(_instanceId, generation, out var newHandle)) {
                 return newHandle;
             }
 
@@ -67,7 +70,7 @@ namespace Viyiw.Handles {
     public sealed class HandleAuthority {
         private sealed class GenerationSource : IGenerationSource {
             private uint _generation = 1;
-            public Generation GetGeneration() => new Generation(_generation);
+            public Generation GetGeneration() => new(_generation);
             public bool TryIncrement() {
                 if (_generation == uint.MaxValue) {
                     return false;
@@ -107,13 +110,13 @@ namespace Viyiw.Handles {
 
         public bool Release(GenericHandle handle) {
 
-            if (_generationSources.TryGetValue(handle.InstanceId, out var generationSource)) {
-                if (handle.Generation == generationSource.GetGeneration()) {
+            if (_generationSources.TryGetValue(handle._instanceId, out var generationSource)) {
+                if (handle._generation == generationSource.GetGeneration()) {
                     if (generationSource.TryIncrement()) {
                         return true;
                     }
 
-                    _generationSources.Remove(handle.InstanceId);
+                    _generationSources.Remove(handle._instanceId);
                     return false;
                 }
 
@@ -125,11 +128,11 @@ namespace Viyiw.Handles {
     }
 
     public readonly struct GenericHandle : IEquatable<GenericHandle> {
-        internal readonly InstanceId InstanceId;
-        internal readonly Generation Generation;
+        internal readonly InstanceId _instanceId;
+        internal readonly Generation _generation;
         private GenericHandle(InstanceId instanceId, Generation generation) {
-            InstanceId = instanceId;
-            Generation = generation;
+            _instanceId = instanceId;
+            _generation = generation;
         }
         internal static bool TryNew(InstanceId instanceId, Generation generation, out GenericHandle newHandle) {
             if (instanceId.IsValid() && generation.IsValid()) {
@@ -140,21 +143,21 @@ namespace Viyiw.Handles {
             newHandle = default;
             return false;
         }
-        public bool IsValid() => InstanceId.IsValid() && Generation.IsValid();
+        public bool IsValid() => _instanceId.IsValid() && _generation.IsValid();
         public bool Equals(GenericHandle other) {
-            return InstanceId == other.InstanceId && Generation == other.Generation;
+            return _instanceId == other._instanceId && _generation == other._generation;
         }
         public override bool Equals(object obj) {
             return obj is GenericHandle other && Equals(other);
         }
         public override int GetHashCode() {
-            return HashCode.Combine(InstanceId.GetHashCode(), Generation.GetHashCode());
+            return HashCode.Combine(_instanceId.GetHashCode(), _generation.GetHashCode());
         }
         public static bool operator ==(GenericHandle left, GenericHandle right) {
-            return left.InstanceId == right.InstanceId && left.Generation == right.Generation;
+            return left._instanceId == right._instanceId && left._generation == right._generation;
         }
         public static bool operator !=(GenericHandle left, GenericHandle right) {
-            return left.InstanceId != right.InstanceId || left.Generation != right.Generation;
+            return left._instanceId != right._instanceId || left._generation != right._generation;
         }
     }
 
