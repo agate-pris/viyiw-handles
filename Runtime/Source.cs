@@ -128,20 +128,20 @@ namespace Viyiw.Handles {
             return handle;
         }
 
-        public bool TryAdvance(Handle current, out Handle next) {
+        public bool TryAdvance(Handle currentHandle, out Handle nextHandle) {
 
-            var instanceId = current.GetInstanceId();
+            var instanceId = currentHandle.GetInstanceId();
 
             if (_generationSources.TryGetValue(instanceId, out var generationSource)) {
-                if (current.GetGeneration() == generationSource.GetGeneration()) {
+                if (currentHandle.GetGeneration() == generationSource.GetGeneration()) {
 
                     if (generationSource.Advance(out var newGeneration)) {
-                        next = new(instanceId, newGeneration);
+                        nextHandle = new(instanceId, newGeneration);
                         return true;
                     }
 
                     _generationSources.Remove(instanceId);
-                    next = default;
+                    nextHandle = default;
                     return false;
                 }
 
@@ -152,18 +152,8 @@ namespace Viyiw.Handles {
         }
     }
 
-    internal struct Pooled<T> {
-        private readonly Handle _handle;
-        private readonly T _value;
-        internal Pooled(Handle handle, T value) {
-            _handle = handle;
-            _value = value;
-        }
-        public Handle GetHandle() => _handle;
-        public T GetValue() => _value;
-    }
 
-    public struct Lease<T> {
+    public readonly struct Lease<T> {
         private readonly Handle _handle;
         private readonly T _value;
         internal Lease(Handle handle, T value) {
@@ -180,27 +170,38 @@ namespace Viyiw.Handles {
 
     public class Pool<T> {
 
+        private readonly struct Entry {
+            private readonly Handle _nextHandle;
+            private readonly T _value;
+            public Entry(Handle handle, T value) {
+                _nextHandle = handle;
+                _value = value;
+            }
+            //public Handle GetHandle() => _nextHandle;
+            //public T GetValue() => _value;
+            public Lease<T> Lease() => new(_nextHandle, _value);
+        }
+
         private readonly HandleAuthority _handleAuthority;
         private readonly IFactory<T> _factory;
-        private readonly Stack<Pooled<T>> _pooled = new();
+        private readonly Stack<Entry> _available = new();
         public Pool(HandleAuthority handleAuthority, IFactory<T> factory) {
             _handleAuthority = handleAuthority;
             _factory = factory;
         }
 
-        public void Release(Handle handle, T value) {
+        public void Release(Lease<T> lease) {
 
-            if (_handleAuthority.TryAdvance(handle, out var newHandle)) {
+            // 世代の寿命が尽きた場合はオブジェクトをプールしない。
 
-                // 世代の寿命が尽きた場合はオブジェクトをプールしない。
-
-                _pooled.Push(new(newHandle, value));
+            if (_handleAuthority.TryAdvance(lease.GetHandle(), out var nextHandle)) {
+                _available.Push(new(nextHandle, lease.GetValue()));
             }
         }
         public Lease<T> Get() {
 
-            if (_pooled.TryPop(out var popped)) {
-                return new Lease<T>(popped.GetHandle(), popped.GetValue());
+            if (_available.TryPop(out var entry)) {
+                return entry.Lease();
             }
 
             var handle = _handleAuthority.Issue();
