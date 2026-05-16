@@ -85,33 +85,6 @@ namespace Viyiw.Handles {
         Generation GetGeneration();
     }
 
-    public readonly struct HandleSource {
-        private readonly InstanceId _instanceId;
-        private readonly IGenerationSource _generationSource;
-        internal HandleSource(
-            InstanceId instanceId,
-            IGenerationSource generationSource) {
-
-            if (instanceId.IsValid() && generationSource.IsValid()) {
-                _instanceId = instanceId;
-                _generationSource = generationSource;
-                return;
-            }
-
-            throw new InvalidOperationException("HandleSource の作成に失敗しました。");
-        }
-        public bool Matches(Handle handle) {
-
-            // ここでは HandleSource._generationSource の等価性は比較しない。
-            // HandleSource のコンストラクタがアセンブリ内でしか呼び出せないことと、
-            // その呼び出しを HandleAuthority.Issue メソッドのみが行うことによって
-            // HandleSource._instanceId と Handle._generationSource の組み合わせの整合性を保証する。
-
-            var generation = _generationSource.GetGeneration();
-            return _instanceId == handle.GetInstanceId() && generation == handle.GetGeneration();
-        }
-    }
-
     public sealed class HandleAuthority {
 
         private sealed class GenerationSource : IGenerationSource {
@@ -143,18 +116,16 @@ namespace Viyiw.Handles {
             }
             return new(_lastInstanceId);
         }
-        public HandleSource Issue(out Handle handle) {
+        public Handle Issue() {
 
             var instanceId = IssueInstanceId();
             var generationSource = new GenerationSource();
             var generation = generationSource.GetGeneration();
-            var handleSource = new HandleSource(instanceId, generationSource);
-
-            handle = new(instanceId, generation);
+            var handle = new Handle(instanceId, generation);
 
             _generationSources.Add(instanceId, generationSource);
 
-            return handleSource;
+            return handle;
         }
 
         public bool TryAdvance(Handle current, out Handle next) {
@@ -178,6 +149,64 @@ namespace Viyiw.Handles {
             } else {
                 throw new InvalidOperationException("ハンドルの開放に失敗しました。不明なインスタンス ID です。");
             }
+        }
+    }
+
+    internal struct Pooled<T> {
+        private readonly Handle _handle;
+        private readonly T _value;
+        internal Pooled(Handle handle, T value) {
+            _handle = handle;
+            _value = value;
+        }
+        public Handle GetHandle() => _handle;
+        public T GetValue() => _value;
+    }
+
+    public struct Lease<T> {
+        private readonly Handle _handle;
+        private readonly T _value;
+        internal Lease(Handle handle, T value) {
+            _handle = handle;
+            _value = value;
+        }
+        public Handle GetHandle() => _handle;
+        public T GetValue() => _value;
+    }
+
+    public interface IFactory<T> {
+        T Create();
+    }
+
+    public class Pool<T> {
+
+        private readonly HandleAuthority _handleAuthority;
+        private readonly IFactory<T> _factory;
+        private readonly Stack<Pooled<T>> _pooled = new();
+        public Pool(HandleAuthority handleAuthority, IFactory<T> factory) {
+            _handleAuthority = handleAuthority;
+            _factory = factory;
+        }
+
+        public void Release(Handle handle, T value) {
+
+            if (_handleAuthority.TryAdvance(handle, out var newHandle)) {
+
+                // 世代の寿命が尽きた場合はオブジェクトをプールしない。
+
+                _pooled.Push(new(newHandle, value));
+            }
+        }
+        public Lease<T> Get() {
+
+            if (_pooled.TryPop(out var popped)) {
+                return new Lease<T>(popped.GetHandle(), popped.GetValue());
+            }
+
+            var handle = _handleAuthority.Issue();
+            var value = _factory.Create();
+
+            return new(handle, value);
         }
     }
 
