@@ -100,7 +100,7 @@ namespace Viyiw.Handles {
 
             throw new InvalidOperationException("HandleSource の作成に失敗しました。");
         }
-        public bool EqualsHandle(Handle handle) {
+        public bool Matches(Handle handle) {
 
             // ここでは HandleSource._generationSource の等価性は比較しない。
             // HandleSource のコンストラクタがアセンブリ内でしか呼び出せないことと、
