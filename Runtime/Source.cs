@@ -101,9 +101,14 @@ namespace Viyiw.Handles {
             throw new InvalidOperationException("HandleSource の作成に失敗しました。");
         }
         public bool EqualsHandle(Handle handle) {
+
+            // ここでは HandleSource._generationSource の等価性は比較しない。
+            // HandleSource のコンストラクタがアセンブリ内でしか呼び出せないことと、
+            // その呼び出しを HandleAuthority.Issue メソッドのみが行うことによって
+            // HandleSource._instanceId と Handle._generationSource の組み合わせの整合性を保証する。
+
             var generation = _generationSource.GetGeneration();
-            return _instanceId == handle.GetInstanceId() &&
-                generation == handle.GetGeneration();
+            return _instanceId == handle.GetInstanceId() && generation == handle.GetGeneration();
         }
     }
 
@@ -113,13 +118,19 @@ namespace Viyiw.Handles {
             private uint _generation = 1;
             bool IGenerationSource.IsValid() => 0 < _generation;
             public Generation GetGeneration() => new(_generation);
-            public bool TryIncrement(out Generation newGeneration) {
+            public bool Advance(out Generation newGeneration) {
                 if (_generation == uint.MaxValue) {
                     newGeneration = default;
                     return false;
                 }
+
                 newGeneration = new(++_generation);
-                return true;
+
+                // もし uint.MaxValue を有効な値として使えるようにしてしまうと
+                // その世代の二重開放を検出できなくなってしまうため、
+                // _generation が uint.MaxValue に到達した時点で無効な状態にする。
+
+                return _generation != uint.MaxValue;
             }
         }
 
@@ -156,7 +167,7 @@ namespace Viyiw.Handles {
             if (_generationSources.TryGetValue(instanceId, out var generationSource)) {
                 if (handle.GetGeneration() == generationSource.GetGeneration()) {
 
-                    if (generationSource.TryIncrement(out var newGeneration)) {
+                    if (generationSource.Advance(out var newGeneration)) {
                         outHandle = new(instanceId, newGeneration);
                         return true;
                     }
