@@ -46,20 +46,20 @@ namespace Viyiw.Handles {
             _instanceId = instanceId;
             _generationSource = generationSource;
         }
-        public GenericHandle ToHandle() {
+        public Handle ToHandle() {
 
             var generation = _generationSource.GetGeneration();
 
-            if (GenericHandle.TryNew(_instanceId, generation, out var newHandle)) {
+            if (Handle.TryNew(_instanceId, generation, out var newHandle)) {
                 return newHandle;
             }
 
             // インスタンス ID または世代 ID が不正な場合は例外を送出する。
             throw new InvalidOperationException("ハンドルの作成に失敗しました。");
         }
-        public bool EqualsHandle(GenericHandle inHandle) {
+        public bool EqualsHandle(Handle inHandle) {
             var generation = _generationSource.GetGeneration();
-            if (GenericHandle.TryNew(_instanceId, generation, out var handle)) {
+            if (Handle.TryNew(_instanceId, generation, out var handle)) {
                 return handle.Equals(inHandle);
             }
             throw new InvalidOperationException();
@@ -87,13 +87,13 @@ namespace Viyiw.Handles {
             }
             return new InstanceId(_lastInstanceId);
         }
-        public HandleSource Issue(out GenericHandle handle) {
+        public HandleSource Issue(out Handle handle) {
 
             var instanceId = IssueInstanceId();
             var generationSource = new GenerationSource();
             var generation = generationSource.GetGeneration();
 
-            if (GenericHandle.TryNew(instanceId, generation, out handle)) {
+            if (Handle.TryNew(instanceId, generation, out handle)) {
 
                 // ハンドルの作成に成功した場合のみ
                 // GenerationSource を _generationSources に登録する。
@@ -107,7 +107,7 @@ namespace Viyiw.Handles {
 
         // Release という名前は適切ではないかも。
 
-        public bool Release(GenericHandle handle) {
+        public bool Release(Handle handle) {
 
             if (_generationSources.TryGetValue(handle._instanceId, out var generationSource)) {
                 if (handle._generation == generationSource.GetGeneration()) {
@@ -126,16 +126,16 @@ namespace Viyiw.Handles {
         }
     }
 
-    public readonly struct GenericHandle : IEquatable<GenericHandle> {
+    public readonly struct Handle : IEquatable<Handle> {
         internal readonly InstanceId _instanceId;
         internal readonly Generation _generation;
-        private GenericHandle(InstanceId instanceId, Generation generation) {
+        private Handle(InstanceId instanceId, Generation generation) {
             _instanceId = instanceId;
             _generation = generation;
         }
-        internal static bool TryNew(InstanceId instanceId, Generation generation, out GenericHandle newHandle) {
+        internal static bool TryNew(InstanceId instanceId, Generation generation, out Handle newHandle) {
             if (instanceId.IsValid() && generation.IsValid()) {
-                newHandle = new GenericHandle(instanceId, generation);
+                newHandle = new Handle(instanceId, generation);
                 return true;
             }
 
@@ -143,19 +143,19 @@ namespace Viyiw.Handles {
             return false;
         }
         public bool IsValid() => _instanceId.IsValid() && _generation.IsValid();
-        public bool Equals(GenericHandle other) {
+        public bool Equals(Handle other) {
             return _instanceId == other._instanceId && _generation == other._generation;
         }
         public override bool Equals(object obj) {
-            return obj is GenericHandle other && Equals(other);
+            return obj is Handle other && Equals(other);
         }
         public override int GetHashCode() {
             return HashCode.Combine(_instanceId.GetHashCode(), _generation.GetHashCode());
         }
-        public static bool operator ==(GenericHandle left, GenericHandle right) {
+        public static bool operator ==(Handle left, Handle right) {
             return left._instanceId == right._instanceId && left._generation == right._generation;
         }
-        public static bool operator !=(GenericHandle left, GenericHandle right) {
+        public static bool operator !=(Handle left, Handle right) {
             return left._instanceId != right._instanceId || left._generation != right._generation;
         }
     }
