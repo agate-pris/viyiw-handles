@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 
 namespace Viyiw.Handles {
+
     internal readonly struct InstanceId : IEquatable<InstanceId> {
         private readonly int _value;
         internal InstanceId(int value) { _value = value; }
@@ -19,9 +20,7 @@ namespace Viyiw.Handles {
 
     internal readonly struct Generation : IEquatable<Generation> {
         private readonly uint _value;
-        internal Generation(uint value) {
-            _value = value;
-        }
+        internal Generation(uint value) { _value = value; }
         public bool IsValid() => 0 < _value;
         public bool Equals(Generation other) => _value.Equals(other._value);
         public override bool Equals(object obj) => obj is Generation other && Equals(other);
@@ -38,10 +37,10 @@ namespace Viyiw.Handles {
         Generation GetGeneration();
     }
 
-    public readonly struct HandleIdentity {
+    public readonly struct HandleSource {
         private readonly InstanceId _instanceId;
         private readonly IGenerationSource _generationSource;
-        internal HandleIdentity(
+        internal HandleSource(
             InstanceId instanceId,
             IGenerationSource generationSource) {
             _instanceId = instanceId;
@@ -88,7 +87,7 @@ namespace Viyiw.Handles {
             }
             return new InstanceId(_lastInstanceId);
         }
-        public HandleIdentity Issue(out GenericHandle handle) {
+        public HandleSource Issue(out GenericHandle handle) {
 
             var instanceId = IssueInstanceId();
             var generationSource = new GenerationSource();
