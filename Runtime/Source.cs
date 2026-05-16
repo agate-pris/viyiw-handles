@@ -157,23 +157,20 @@ namespace Viyiw.Handles {
             return handleSource;
         }
 
-        // - Release という名前は適切ではないかも。
-        // - outHandle という引数名は具体性を欠いているかも。
+        public bool TryAdvance(Handle current, out Handle next) {
 
-        public bool Release(Handle handle, out Handle outHandle) {
-
-            var instanceId = handle.GetInstanceId();
+            var instanceId = current.GetInstanceId();
 
             if (_generationSources.TryGetValue(instanceId, out var generationSource)) {
-                if (handle.GetGeneration() == generationSource.GetGeneration()) {
+                if (current.GetGeneration() == generationSource.GetGeneration()) {
 
                     if (generationSource.Advance(out var newGeneration)) {
-                        outHandle = new(instanceId, newGeneration);
+                        next = new(instanceId, newGeneration);
                         return true;
                     }
 
                     _generationSources.Remove(instanceId);
-                    outHandle = default;
+                    next = default;
                     return false;
                 }
 
