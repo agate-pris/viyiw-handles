@@ -70,11 +70,12 @@ namespace Viyiw.Handles {
         private sealed class GenerationSource : IGenerationSource {
             private uint _generation = 1;
             public Generation GetGeneration() => new(_generation);
-            public bool TryIncrement() {
+            public bool TryIncrement(out Generation newGeneration) {
                 if (_generation == uint.MaxValue) {
+                    newGeneration = default;
                     return false;
                 }
-                _generation++;
+                newGeneration = new Generation(++_generation);
                 return true;
             }
         }
@@ -107,15 +108,20 @@ namespace Viyiw.Handles {
 
         // Release という名前は適切ではないかも。
 
-        public bool Release(Handle handle) {
+        public bool Release(Handle handle, out Handle outHandle) {
 
             if (_generationSources.TryGetValue(handle._instanceId, out var generationSource)) {
                 if (handle._generation == generationSource.GetGeneration()) {
-                    if (generationSource.TryIncrement()) {
-                        return true;
+                    if (generationSource.TryIncrement(out var newGeneration)) {
+                        if (Handle.TryNew(handle._instanceId, newGeneration, out outHandle)) {
+                            return true;
+                        } else {
+                            throw new InvalidOperationException("ハンドルの作成に失敗しました。");
+                        }
                     }
 
                     _generationSources.Remove(handle._instanceId);
+                    outHandle = default;
                     return false;
                 }
 
