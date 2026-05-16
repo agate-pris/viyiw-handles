@@ -5,7 +5,15 @@ namespace Viyiw.Handles {
 
     internal readonly struct InstanceId : IEquatable<InstanceId> {
         private readonly int _value;
-        internal InstanceId(int value) { _value = value; }
+        public InstanceId(int value) {
+
+            if (0 < value) {
+                _value = value;
+                return;
+            }
+
+            throw new InvalidOperationException("InstanceId の値は正の整数でなければなりません。");
+        }
         public bool IsValid() => 0 < _value;
         public bool Equals(InstanceId other) => _value.Equals(other._value);
         public override bool Equals(object obj) => obj is InstanceId other && Equals(other);
@@ -20,7 +28,15 @@ namespace Viyiw.Handles {
 
     internal readonly struct Generation : IEquatable<Generation> {
         private readonly uint _value;
-        internal Generation(uint value) { _value = value; }
+        public Generation(uint value) {
+
+            if (0 < value) {
+                _value = value;
+                return;
+            }
+
+            throw new InvalidOperationException("Generation の値は正の整数でなければなりません。");
+        }
         public bool IsValid() => 0 < _value;
         public bool Equals(Generation other) => _value.Equals(other._value);
         public override bool Equals(object obj) => obj is Generation other && Equals(other);
@@ -34,6 +50,7 @@ namespace Viyiw.Handles {
     }
 
     internal interface IGenerationSource {
+        internal bool IsValid();
         Generation GetGeneration();
     }
 
@@ -43,84 +60,77 @@ namespace Viyiw.Handles {
         internal HandleSource(
             InstanceId instanceId,
             IGenerationSource generationSource) {
-            _instanceId = instanceId;
-            _generationSource = generationSource;
-        }
-        public Handle ToHandle() {
 
-            var generation = _generationSource.GetGeneration();
-
-            if (Handle.TryNew(_instanceId, generation, out var newHandle)) {
-                return newHandle;
+            if (instanceId.IsValid() && generationSource.IsValid()) {
+                _instanceId = instanceId;
+                _generationSource = generationSource;
+                return;
             }
 
-            // インスタンス ID または世代 ID が不正な場合は例外を送出する。
-            throw new InvalidOperationException("ハンドルの作成に失敗しました。");
+            throw new InvalidOperationException("HandleSource の作成に失敗しました。");
         }
-        public bool EqualsHandle(Handle inHandle) {
+        public bool EqualsHandle(Handle handle) {
             var generation = _generationSource.GetGeneration();
-            if (Handle.TryNew(_instanceId, generation, out var handle)) {
-                return handle.Equals(inHandle);
-            }
-            throw new InvalidOperationException();
+            var current = new Handle(_instanceId, generation);
+            return current.Equals(handle);
         }
     }
 
     public sealed class HandleAuthority {
+
         private sealed class GenerationSource : IGenerationSource {
             private uint _generation = 1;
+            bool IGenerationSource.IsValid() => 0 < _generation;
             public Generation GetGeneration() => new(_generation);
             public bool TryIncrement(out Generation newGeneration) {
                 if (_generation == uint.MaxValue) {
                     newGeneration = default;
                     return false;
                 }
-                newGeneration = new Generation(++_generation);
+                newGeneration = new(++_generation);
                 return true;
             }
         }
 
-        private int _lastInstanceId;
+        private int _lastInstanceId = 0;
         private readonly Dictionary<InstanceId, GenerationSource> _generationSources = new();
+
         private InstanceId IssueInstanceId() {
             checked {
                 _lastInstanceId++;
             }
-            return new InstanceId(_lastInstanceId);
+            return new(_lastInstanceId);
         }
         public HandleSource Issue(out Handle handle) {
 
             var instanceId = IssueInstanceId();
             var generationSource = new GenerationSource();
             var generation = generationSource.GetGeneration();
+            var handleSource = new HandleSource(instanceId, generationSource);
 
-            if (Handle.TryNew(instanceId, generation, out handle)) {
+            handle = new(instanceId, generation);
 
-                // ハンドルの作成に成功した場合のみ
-                // GenerationSource を _generationSources に登録する。
-                _generationSources.Add(instanceId, generationSource);
+            _generationSources.Add(instanceId, generationSource);
 
-                return new(instanceId, generationSource);
-            }
-
-            throw new InvalidOperationException("ハンドルの作成に失敗しました。");
+            return handleSource;
         }
 
-        // Release という名前は適切ではないかも。
+        // - Release という名前は適切ではないかも。
+        // - outHandle という引数名は具体性を欠いているかも。
 
         public bool Release(Handle handle, out Handle outHandle) {
 
-            if (_generationSources.TryGetValue(handle._instanceId, out var generationSource)) {
-                if (handle._generation == generationSource.GetGeneration()) {
+            var instanceId = handle.GetInstanceId();
+
+            if (_generationSources.TryGetValue(instanceId, out var generationSource)) {
+                if (handle.GetGeneration() == generationSource.GetGeneration()) {
+
                     if (generationSource.TryIncrement(out var newGeneration)) {
-                        if (Handle.TryNew(handle._instanceId, newGeneration, out outHandle)) {
-                            return true;
-                        } else {
-                            throw new InvalidOperationException("ハンドルの作成に失敗しました。");
-                        }
+                        outHandle = new(instanceId, newGeneration);
+                        return true;
                     }
 
-                    _generationSources.Remove(handle._instanceId);
+                    _generationSources.Remove(instanceId);
                     outHandle = default;
                     return false;
                 }
@@ -133,21 +143,18 @@ namespace Viyiw.Handles {
     }
 
     public readonly struct Handle : IEquatable<Handle> {
-        internal readonly InstanceId _instanceId;
-        internal readonly Generation _generation;
-        private Handle(InstanceId instanceId, Generation generation) {
-            _instanceId = instanceId;
-            _generation = generation;
-        }
-        internal static bool TryNew(InstanceId instanceId, Generation generation, out Handle newHandle) {
+        private readonly InstanceId _instanceId;
+        private readonly Generation _generation;
+        internal Handle(InstanceId instanceId, Generation generation) {
             if (instanceId.IsValid() && generation.IsValid()) {
-                newHandle = new Handle(instanceId, generation);
-                return true;
+                _instanceId = instanceId;
+                _generation = generation;
+                return;
             }
-
-            newHandle = default;
-            return false;
+            throw new InvalidOperationException("ハンドルの作成に失敗しました。");
         }
+        internal InstanceId GetInstanceId() => _instanceId;
+        internal Generation GetGeneration() => _generation;
         public bool IsValid() => _instanceId.IsValid() && _generation.IsValid();
         public bool Equals(Handle other) {
             return _instanceId == other._instanceId && _generation == other._generation;
@@ -182,7 +189,7 @@ namespace Viyiw.Handles {
     }
 
     public sealed class ArchetypeIdIssuer {
-        private int _last;
+        private int _last = 0;
         public ArchetypeId Issue() {
             checked {
                 _last++;
