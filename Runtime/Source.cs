@@ -62,7 +62,7 @@ namespace Viyiw.Handles {
         }
         internal InstanceId GetInstanceId() => _instanceId;
         internal Generation GetGeneration() => _generation;
-        public bool IsValid() => _instanceId.IsValid() && _generation.IsValid();
+        internal bool IsValid() => _instanceId.IsValid() && _generation.IsValid();
         public bool Equals(Handle other) {
             return _instanceId == other._instanceId && _generation == other._generation;
         }
@@ -128,11 +128,24 @@ namespace Viyiw.Handles {
             return handle;
         }
 
+        internal bool IsAlive(Handle handle) {
+
+            // Pool との組み合わせの不一致を防止するため internal にする。
+
+            var instanceId = handle.GetInstanceId();
+
+            if (_generationSources.TryGetValue(instanceId, out var generationSource)) {
+                return handle.GetGeneration() == generationSource.GetGeneration();
+            } else {
+                throw new InvalidOperationException("ハンドルの有効期限の確認に失敗しました。不明なインスタンス ID です。");
+            }
+        }
         public bool TryAdvance(Handle currentHandle, out Handle nextHandle) {
 
             var instanceId = currentHandle.GetInstanceId();
 
             if (_generationSources.TryGetValue(instanceId, out var generationSource)) {
+
                 if (currentHandle.GetGeneration() == generationSource.GetGeneration()) {
 
                     if (generationSource.Advance(out var newGeneration)) {
@@ -146,22 +159,50 @@ namespace Viyiw.Handles {
                 }
 
                 throw new InvalidOperationException("ハンドルの開放に失敗しました。このハンドルは開放済みです。");
-            } else {
-                throw new InvalidOperationException("ハンドルの開放に失敗しました。不明なインスタンス ID です。");
             }
+
+            throw new InvalidOperationException("ハンドルの開放に失敗しました。不明なインスタンス ID です。");
         }
     }
 
 
     public readonly struct Lease<T> {
+        private readonly Pool<T> _owner;
         private readonly Handle _handle;
         private readonly T _value;
-        internal Lease(Handle handle, T value) {
-            _handle = handle;
-            _value = value;
+        internal Lease(Pool<T> owner, Handle handle, T value) {
+
+            if (owner == null) {
+                throw new InvalidOperationException("Lease の作成に失敗しました。所有者が null です。");
+            }
+
+            if (handle.IsValid()) {
+                _owner = owner;
+                _handle = handle;
+                _value = value;
+                return;
+            }
+
+            throw new InvalidOperationException("Lease の作成に失敗しました。ハンドルが無効です。");
         }
+        internal Pool<T> GetOwner() => _owner;
         public Handle GetHandle() => _handle;
         public T GetValue() => _value;
+        public bool IsAlive() {
+
+            if (_owner == null) {
+                return false;
+            }
+
+            // _handle が無効になるのはデフォルト値に対してのみであり、
+            // _owner が null でない限り _owner と _handle の組み合わせが不正になることはない。
+            // したがって、ここでは _handle 自身の有効性は確認は不要。
+
+            return _owner.IsAlive(_handle);
+        }
+        public void Release() {
+            _owner.Release(this);
+        }
     }
 
     public interface IFactory<T> {
@@ -171,15 +212,16 @@ namespace Viyiw.Handles {
     public class Pool<T> {
 
         private readonly struct Entry {
+
             private readonly Handle _nextHandle;
             private readonly T _value;
+
             public Entry(Handle handle, T value) {
                 _nextHandle = handle;
                 _value = value;
             }
-            //public Handle GetHandle() => _nextHandle;
-            //public T GetValue() => _value;
-            public Lease<T> Lease() => new(_nextHandle, _value);
+
+            public Lease<T> Lease(Pool<T> owner) => new(owner, _nextHandle, _value);
         }
 
         private readonly HandleAuthority _handleAuthority;
@@ -190,7 +232,16 @@ namespace Viyiw.Handles {
             _factory = factory;
         }
 
-        public void Release(Lease<T> lease) {
+        internal bool IsAlive(Handle handle) {
+
+            // handle の有効性の確認は不要。
+            // このメソッドが呼び出される以前に
+            // _handleAuthority と handle の組み合わせの有効性は確認されているはず。
+            // そして、その時点で Handle の有効性も保証されているはず。
+
+            return _handleAuthority.IsAlive(handle);
+        }
+        internal void Release(Lease<T> lease) {
 
             // 世代の寿命が尽きた場合はオブジェクトをプールしない。
 
@@ -201,13 +252,13 @@ namespace Viyiw.Handles {
         public Lease<T> Get() {
 
             if (_available.TryPop(out var entry)) {
-                return entry.Lease();
+                return entry.Lease(this);
             }
 
             var handle = _handleAuthority.Issue();
             var value = _factory.Create();
 
-            return new(handle, value);
+            return new(this, handle, value);
         }
     }
 
